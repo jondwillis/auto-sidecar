@@ -1,0 +1,13 @@
+---
+alwaysApply: true
+---
+
+DO NOT create documentation files (.md, .txt, SUMMARY, CHANGELOG, etc.) unless explicitly requested by the user.
+
+This includes:
+- TROUBLESHOOTING.md
+- CHANGES.md, CHANGES-SUMMARY.md
+- FIXES.md, IMPROVEMENTS.md
+- Any kind of summary or overview documents
+
+Focus on code changes only. The git history and commit messages are sufficient documentation.
