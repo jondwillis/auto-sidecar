@@ -2,7 +2,24 @@ import Foundation
 
 class SidecarController {
     private let logger = Logger()
-    private let launcherPath = "/Users/jon/auto-continuity/SidecarLauncher"
+    private let launcherPath: String = {
+        // Look for SidecarLauncher in multiple locations
+        let possiblePaths = [
+            Bundle.main.resourcePath.map { "\($0)/SidecarLauncher" },
+            "\(NSHomeDirectory())/auto-continuity/SidecarLauncher",
+            "/usr/local/bin/SidecarLauncher",
+            "\(FileManager.default.currentDirectoryPath)/SidecarLauncher"
+        ].compactMap { $0 }
+        
+        for path in possiblePaths {
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
+        
+        // Fallback to project directory
+        return "\(NSHomeDirectory())/auto-continuity/SidecarLauncher"
+    }()
     
     // Connect to Sidecar using SidecarLauncher binary
     func enableSidecar(completion: @escaping (Bool) -> Void) {
