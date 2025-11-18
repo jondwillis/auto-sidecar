@@ -6,16 +6,23 @@
     <string>com.jonwillis.autosidecar</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/jon/bin/auto-sidecar</string>
+        <string>/usr/local/bin/auto-sidecar</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
+    <key>ProcessType</key>
+    <string>Interactive</string>
     <key>StandardOutPath</key>
     <string>/Users/jon/Library/Logs/auto-sidecar.log</string>
     <key>StandardErrorPath</key>
     <string>/Users/jon/Library/Logs/auto-sidecar.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
 </dict>
 </plist>
 

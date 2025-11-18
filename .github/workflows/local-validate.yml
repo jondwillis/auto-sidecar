@@ -1,0 +1,74 @@
+name: Local Validation
+
+on:
+  workflow_dispatch: # Can be triggered manually
+  push:
+    branches: [main, develop]
+
+jobs:
+  validate:
+    name: Validate Locally
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate shell scripts
+        run: |
+          echo "Checking shell script syntax..."
+          for script in *.sh; do
+            if [ -f "$script" ]; then
+              echo "Checking $script..."
+              bash -n "$script" || exit 1
+            fi
+          done
+
+      - name: Check file permissions
+        run: |
+          echo "Verifying executable permissions..."
+          for script in build.sh uninstall.sh enable.sh disable.sh status.sh test-ci.sh; do
+            if [ -f "$script" ]; then
+              if [ ! -x "$script" ]; then
+                echo "❌ $script is not executable"
+                exit 1
+              else
+                echo "✓ $script is executable"
+              fi
+            fi
+          done
+
+      - name: Validate plist
+        run: |
+          echo "Checking plist syntax..."
+          if command -v plutil &> /dev/null; then
+            plutil -lint com.jonwillis.autosidecar.plist
+          else
+            echo "plutil not available, checking XML syntax..."
+            xmllint --noout com.jonwillis.autosidecar.plist
+          fi
+
+      - name: Check required files
+        run: |
+          echo "Verifying required files exist..."
+          files=(
+            "Package.swift"
+            "README.md"
+            "LICENSE"
+            "build.sh"
+            "uninstall.sh"
+            "com.jonwillis.autosidecar.plist"
+            "Sources/AutoSidecar/main.swift"
+            "Sources/AutoSidecar/USBMonitor.swift"
+            "Sources/AutoSidecar/SidecarController.swift"
+            "Sources/AutoSidecar/Logger.swift"
+          )
+
+          for file in "${files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Missing: $file"
+              exit 1
+            else
+              echo "✓ Found: $file"
+            fi
+          done

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>AutoSidecar</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.jonwillis.autosidecar</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Auto Sidecar</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>2.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Auto Sidecar needs to control Sidecar to automatically connect your iPad.</string>
+    <key>NSSystemAdministrationUsageDescription</key>
+    <string>Auto Sidecar needs system administration access to control Sidecar.</string>
+    <key>SMPrivilegedExecutables</key>
+    <dict>
+        <key>com.jonwillis.autosidecar</key>
+        <string>identifier "com.jonwillis.autosidecar" and anchor apple generic and certificate leaf[subject.CN] = "Jon Willis"</string>
+    </dict>
+</dict>
+</plist>
+

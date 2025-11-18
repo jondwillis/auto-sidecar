@@ -1,14 +1,6 @@
-# Auto Sidecar Daemon
+# Auto Sidecar
 
-A macOS background daemon that automatically enables Sidecar when an iPad Pro is connected via USB, allowing your iPad to function as an external display without manual intervention.
-
-## Features
-
-- **Automatic Detection**: Monitors USB connections using IOKit for efficient, event-driven device detection
-- **Auto-Enable Sidecar**: Automatically activates Sidecar when an iPad is detected
-- **Background Service**: Runs as a LaunchAgent daemon, starting automatically at login
-- **Debouncing**: Prevents multiple activation attempts when devices are connected/disconnected rapidly
-- **Logging**: Comprehensive logging to `~/Library/Logs/auto-sidecar.log` for debugging
+Modern macOS app that automatically activates Sidecar when your iPad is connected via USB. Features an intuitive menu bar interface, onboarding flow, and smart preferences.
 
 ## Requirements
 
@@ -17,196 +9,144 @@ A macOS background daemon that automatically enables Sidecar when an iPad Pro is
 - Both devices signed in with the same Apple ID
 - Handoff enabled on both devices
 - Bluetooth and Wi-Fi enabled
-- iPad connected via USB (USB 3 hub supported)
+- USB connection (works through USB hubs)
 
 ## Installation
 
-1. **Build and Install**:
-   ```bash
-   ./build.sh
-   ```
+### Option 1: Pre-built App (Recommended)
 
-   This will:
-   - Compile the Swift application
-   - Install the binary to `/usr/local/bin/auto-sidecar`
-   - Install and load the LaunchAgent
+1. Download `Auto Sidecar.app` from the latest release
+2. Drag it to your `/Applications` folder
+3. Double-click to launch
+4. Complete the onboarding wizard
 
-2. **Grant Permissions**:
-   
-   The daemon requires Accessibility permissions to control System Events for Sidecar activation:
-   
-   - Open **System Settings** > **Privacy & Security** > **Accessibility**
-   - Click the **+** button
-   - Navigate to `/usr/local/bin/auto-sidecar`
-   - Add it to the list
-   - Ensure the checkbox is enabled
+### Option 2: Build from Source
 
-3. **Verify Installation**:
-   ```bash
-   launchctl list | grep autosidecar
-   ```
-   
-   You should see `com.jonwillis.autosidecar` in the list.
+```bash
+git clone https://github.com/yourusername/auto-continuity.git
+cd auto-continuity
+./build-app.sh
+```
+
+Then drag `Auto Sidecar.app` to your `/Applications` folder and launch it.
+
+## Features
+
+### 🚀 First Launch Onboarding
+- Interactive setup wizard
+- Accessibility permissions checklist
+- Configure launch at login
+- Set disconnect-on-removal preference
+
+### 📊 Menu Bar Interface
+- **Smart Status Display**: Real-time monitoring of connection state
+- **Toggle Auto-Activation**: Quick enable/disable of automatic connections
+- **Connect/Disconnect Toggle**: Manual control with reactive state
+- **Disconnect on USB Removal**: Optional automatic disconnection when iPad unplugged
+- **View Logs**: Quick access to troubleshooting information
+- **About**: Version and license details
+
+### ⚙️ Smart Behavior
+- Automatic connection when iPad plugged in
+- Optional disconnect when iPad unplugged
+- Sleep-aware (won't activate during system sleep)
+- Failure tracking with automatic retry limiting
+- Works through USB hubs
+- Persistent preferences
 
 ## Usage
 
-Once installed, the daemon runs automatically in the background. Simply connect your iPad Pro via USB, and Sidecar should activate automatically within a few seconds.
+After installation, Auto Sidecar will appear in your menu bar with an iPad icon. 
 
-### Manual Control
+**First Launch:**
+1. Complete the onboarding wizard
+2. Grant Accessibility permissions
+3. Optionally enable "Launch at Login"
+4. Configure disconnect behavior
 
-**Stop the daemon**:
-```bash
-launchctl unload ~/Library/LaunchAgents/com.jonwillis.autosidecar.plist
+**Daily Use:**
+- Simply plug in your iPad - Sidecar activates automatically
+- Use menu bar to manually connect/disconnect
+- Toggle auto-activation on/off as needed
+
+## Architecture
+
+Event-driven IOKit monitoring detects iPad connections (vendor ID 0x05ac) and triggers Sidecar via SidecarLauncher binary. 5-second debouncing prevents duplicate activations. AppKit-based menu bar interface provides real-time status and control with UserDefaults-backed preferences.
+
 ```
+Auto Sidecar.app/
+├── Contents/
+│   ├── MacOS/
+│   │   └── AutoSidecar                    # Main executable
+│   ├── Resources/
+│   │   └── SidecarLauncher                # Sidecar control binary
+│   └── Info.plist                         # App metadata
 
-**Start the daemon**:
-```bash
-launchctl load ~/Library/LaunchAgents/com.jonwillis.autosidecar.plist
+Sources/AutoSidecar/
+├── main.swift                             # App lifecycle and coordination
+├── MenuBarController.swift                # Menu bar UI and interactions
+├── OnboardingWindowController.swift       # First-launch onboarding
+├── Preferences.swift                      # UserDefaults-backed settings
+├── SidecarController.swift                # Sidecar connect/disconnect
+├── USBMonitor.swift                       # IOKit USB monitoring
+└── Logger.swift                           # File-based logging
 ```
-
-**View logs**:
-```bash
-tail -f ~/Library/Logs/auto-sidecar.log
-```
-
-## How It Works
-
-1. **USB Monitoring**: Uses IOKit to register for USB device connection/disconnection notifications
-2. **Device Detection**: Filters connected devices to identify iPads by:
-   - Apple vendor ID (0x05ac)
-   - Device name containing "iPad"
-   - Known iPad product IDs
-3. **Sidecar Activation**: When an iPad is detected:
-   - Waits 2 seconds for device initialization
-   - Executes AppleScript to enable Sidecar via Control Center
-   - Uses debouncing to prevent duplicate activation attempts
 
 ## Troubleshooting
 
-### Sidecar doesn't activate automatically
+Check logs: `tail -f ~/Library/Logs/auto-sidecar.log`
 
-1. **Check logs**:
-   ```bash
-   tail -f ~/Library/Logs/auto-sidecar.log
-   ```
+**iPad not detected:**
+- Verify USB connection: `system_profiler SPUSBDataType | grep -i ipad`
+- Device must have "iPad" in USB product name
+- Try different cable/port
 
-2. **Verify iPad is detected**:
-   - Check logs for "iPad detected" messages
-   - Verify the iPad appears in System Settings > Displays
+**Sidecar doesn't activate:**
+- Verify Accessibility permissions are granted
+- Check Sidecar requirements (same Apple ID, Handoff, Bluetooth/Wi-Fi)
+- Test manual Sidecar connection first
 
-3. **Check permissions**:
-   - Ensure Accessibility permissions are granted
-   - System Settings > Privacy & Security > Accessibility
+**App not appearing in menu bar:**
+- Make sure you've launched `Auto Sidecar.app` from Applications
+- Check Activity Monitor for "AutoSidecar" process
+- Check logs for errors: `tail -f ~/Library/Logs/auto-sidecar.log`
+- Try relaunching the app
 
-4. **Verify Sidecar requirements**:
-   - Both devices signed in with same Apple ID
-   - Handoff enabled
-   - Bluetooth and Wi-Fi enabled
-   - iPad unlocked and on
-
-5. **Manual activation test**:
-   - Try manually enabling Sidecar via Control Center
-   - If manual activation works, the issue is with the automation script
-   - Check if your iPad name in Control Center matches what the script expects
-
-### Daemon not running
-
-1. **Check if LaunchAgent is loaded**:
-   ```bash
-   launchctl list | grep autosidecar
-   ```
-
-2. **Reload the LaunchAgent**:
-   ```bash
-   launchctl unload ~/Library/LaunchAgents/com.jonwillis.autosidecar.plist
-   launchctl load ~/Library/LaunchAgents/com.jonwillis.autosidecar.plist
-   ```
-
-3. **Check for errors**:
-   ```bash
-   launchctl error
-   ```
-
-### iPad not detected
-
-1. **Verify USB connection**:
-   - Check that the iPad appears in System Information > USB
-   - Try a different USB port or cable
-
-2. **Check device name**:
-   - The script identifies iPads by name and vendor/product IDs
-   - If your iPad has an unusual name, you may need to update the detection logic in `USBMonitor.swift`
-
-3. **Test device detection**:
-   ```bash
-   system_profiler SPUSBDataType | grep -i ipad
-   ```
+**Onboarding not showing:**
+- Delete preferences: `defaults delete com.jonwillis.autosidecar`
+- Relaunch the app
 
 ## Uninstallation
 
-1. **Unload and remove LaunchAgent**:
+1. Quit Auto Sidecar from the menu bar
+2. Move `Auto Sidecar.app` to Trash (from `/Applications`)
+3. Remove preferences (optional):
    ```bash
-   launchctl unload ~/Library/LaunchAgents/com.jonwillis.autosidecar.plist
-   rm ~/Library/LaunchAgents/com.jonwillis.autosidecar.plist
-   ```
-
-2. **Remove binary**:
-   ```bash
-   sudo rm /usr/local/bin/auto-sidecar
-   ```
-
-3. **Remove logs** (optional):
-   ```bash
+   defaults delete com.jonwillis.autosidecar
    rm ~/Library/Logs/auto-sidecar.log
    ```
+4. Remove from Login Items if configured:
+   System Settings > General > Login Items
 
 ## Development
 
-### Project Structure
-
-This project uses Swift Package Manager for building:
-
-```
-.
-├── Package.swift                    # Swift Package Manager manifest
-├── Sources/
-│   └── AutoSidecar/
-│       ├── main.swift              # Main entry point and orchestration
-│       ├── USBMonitor.swift        # IOKit USB device monitoring
-│       ├── SidecarController.swift # AppleScript-based Sidecar activation
-│       └── Logger.swift            # Logging utility
-├── com.jonwillis.autosidecar.plist # LaunchAgent configuration
-└── build.sh                        # Build and installation script
-```
-
-### Building from Source
-
-Using Swift Package Manager:
-
 ```bash
-# Debug build
-swift build
+swift build                 # Debug build
+swift build -c release      # Release build
+./build-app.sh              # Build .app bundle
+./build.sh                  # Build CLI version (legacy)
 
-# Release build (recommended for production)
-swift build -c release
-
-# Run directly
-swift run
-
-# Or use the build script
-./build.sh
+# Run from Xcode
+open Package.swift          # Open in Xcode
 ```
-
-The built binary will be at `.build/release/auto-sidecar` (or `.build/debug/auto-sidecar` for debug builds).
 
 ## Limitations
 
-- Requires GUI automation (AppleScript) since there's no public API for Sidecar control
-- May break with macOS updates that change Control Center structure
-- iPad name must be recognizable in device detection logic
-- Requires Accessibility permissions
+- Requires Accessibility permissions for Sidecar control
+- Relies on third-party SidecarLauncher binary
+- USB (wired) connections only
+- macOS 13.0 (Ventura) or later required
 
 ## License
 
-This project is provided as-is for personal use.
-
+MIT - See [LICENSE](LICENSE)

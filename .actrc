@@ -1,0 +1,5 @@
+# Act configuration for local GitHub Actions testing
+# Use macOS runner for accurate testing (requires Docker with macOS support or native)
+-P macos-latest=-self-hosted
+--container-architecture linux/amd64
+

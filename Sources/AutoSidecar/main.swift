@@ -4,16 +4,37 @@ import Cocoa
 
 let logger = Logger()
 
+// Notification name for state changes
+extension Notification.Name {
+    static let autoSidecarStateChanged = Notification.Name("autoSidecarStateChanged")
+}
+
+struct AutoSidecarState {
+    let isEnabled: Bool
+    let hasConnectedIPad: Bool
+    let isSleeping: Bool
+    let failureCount: Int
+}
+
 class AutoSidecar {
     private let usbMonitor: USBMonitor
-    private let sidecarController: SidecarController
+    let sidecarController: SidecarController  // Made public for MenuBarController access
     private var lastActivationAttempt: Date?
     private let activationDebounceInterval: TimeInterval = 5.0 // 5 seconds
-    private var isEnabled = true  // Can be toggled via file flag
+    private var isEnabled = true  // Can be toggled via preferences
     private var isSleeping = false
     private var connectedIPadSerials = Set<String>()  // Track physically connected iPads
     private var failureCount = 0
     private let maxFailures = 3  // Stop trying after 3 failures
+    
+    var currentState: AutoSidecarState {
+        return AutoSidecarState(
+            isEnabled: isEnabled,
+            hasConnectedIPad: !connectedIPadSerials.isEmpty,
+            isSleeping: isSleeping,
+            failureCount: failureCount
+        )
+    }
     
     init() {
         self.usbMonitor = USBMonitor()
@@ -30,19 +51,19 @@ class AutoSidecar {
         // Register for sleep/wake notifications
         registerForSleepNotifications()
         
-        // Check if daemon is disabled via flag file
-        checkEnabledStatus()
+        // Load preferences
+        updateFromPreferences()
     }
     
     func start() {
-        logger.log("Starting Auto Sidecar daemon (v1.1)")
+        logger.log("Starting Auto Sidecar (v1.2)")
         if !isEnabled {
-            logger.log("Auto-activation is DISABLED. Remove ~/Library/Preferences/.auto-sidecar-disabled to enable")
+            logger.log("Auto-activation is DISABLED. Use menu bar to enable or remove ~/Library/Preferences/.auto-sidecar-disabled")
         }
         usbMonitor.start()
         
-        // Keep the run loop alive
-        RunLoop.main.run()
+        // Notify initial state
+        notifyStateChanged()
     }
     
     private func registerForSleepNotifications() {
@@ -66,9 +87,31 @@ class AutoSidecar {
         }
     }
     
-    private func checkEnabledStatus() {
-        let disableFlagPath = NSHomeDirectory() + "/Library/Preferences/.auto-sidecar-disabled"
-        isEnabled = !FileManager.default.fileExists(atPath: disableFlagPath)
+    func updateFromPreferences() {
+        isEnabled = Preferences.shared.isAutoActivationEnabled
+        notifyStateChanged()
+    }
+    
+    func toggleAutoActivation() {
+        Preferences.shared.isAutoActivationEnabled.toggle()
+        updateFromPreferences()
+        logger.log("Auto-activation \(isEnabled ? "enabled" : "disabled") via menu bar")
+    }
+    
+    func manualConnect(completion: @escaping (Bool) -> Void) {
+        logger.log("Manual connection requested via menu bar")
+        sidecarController.enableSidecar(completion: completion)
+    }
+    
+    func manualDisconnect(completion: @escaping (Bool) -> Void) {
+        logger.log("Manual disconnection requested via menu bar")
+        sidecarController.disableSidecar(completion: completion)
+    }
+    
+    private func notifyStateChanged() {
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .autoSidecarStateChanged, object: nil)
+        }
     }
     
     private func handleDeviceConnected(_ deviceInfo: USBDeviceInfo) {
@@ -84,8 +127,10 @@ class AutoSidecar {
                 logger.log("Tracking iPad serial: \(serial)")
             }
             
+            // Notify state changed (iPad connected)
+            notifyStateChanged()
+            
             // Check if auto-activation is disabled
-            checkEnabledStatus()
             if !isEnabled {
                 logger.log("Auto-activation is disabled - skipping")
                 return
@@ -130,9 +175,24 @@ class AutoSidecar {
                 logger.log("Removed iPad serial: \(serial)")
             }
             
+            // Disconnect Sidecar if preference is enabled
+            if Preferences.shared.shouldDisconnectOnUSBRemoval {
+                logger.log("Disconnecting Sidecar due to USB removal (preference enabled)")
+                sidecarController.disableSidecar { success in
+                    if success {
+                        logger.log("✓ Sidecar disconnected after iPad removal")
+                    } else {
+                        logger.log("✗ Failed to disconnect Sidecar after iPad removal")
+                    }
+                }
+            }
+            
             // Reset state for next connection
             lastActivationAttempt = nil
             failureCount = 0  // Reset failure count on disconnect
+            
+            // Notify state changed (iPad disconnected)
+            notifyStateChanged()
         }
     }
     
@@ -170,7 +230,48 @@ class AutoSidecar {
     }
 }
 
+// AppDelegate for menu bar application
+class AppDelegate: NSObject, NSApplicationDelegate {
+    var autoSidecar: AutoSidecar!
+    var menuBarController: MenuBarController!
+    var onboardingWindowController: OnboardingWindowController?
+    
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Initialize AutoSidecar
+        autoSidecar = AutoSidecar()
+        
+        // Create menu bar UI
+        menuBarController = MenuBarController(autoSidecar: autoSidecar)
+        
+        // Show onboarding if first launch
+        if !Preferences.shared.hasCompletedOnboarding {
+            showOnboarding()
+        }
+        
+        // Start monitoring
+        autoSidecar.start()
+    }
+    
+    func applicationWillTerminate(_ notification: Notification) {
+        logger.log("Auto Sidecar terminating")
+    }
+    
+    private func showOnboarding() {
+        onboardingWindowController = OnboardingWindowController()
+        onboardingWindowController?.showWindow(nil)
+        onboardingWindowController?.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
 // Main entry point
-let autoSidecar = AutoSidecar()
-autoSidecar.start()
+let app = NSApplication.shared
+let delegate = AppDelegate()
+app.delegate = delegate
+
+// Set activation policy to accessory (menu bar only, no Dock icon)
+app.setActivationPolicy(.accessory)
+
+// Run the application
+app.run()
 
