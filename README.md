@@ -54,6 +54,14 @@ Then drag `Auto Sidecar.app` to your `/Applications` folder and launch it.
 - Works through USB hubs
 - Persistent preferences
 
+## Troubleshooting
+
+
+Quick diagnostic check:
+```bash
+./diagnose-devices.sh
+```
+
 ## Usage
 
 After installation, Auto Sidecar will appear in your menu bar with an iPad icon. 
