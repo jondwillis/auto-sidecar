@@ -9,30 +9,9 @@ struct USBDeviceInfo {
     
     var isIPad: Bool {
         // Apple's vendor ID is 0x05ac
-        // Check for iPad product IDs or device name
-        if vendorID == 0x05ac {
-            // Common iPad identifiers in device name
-            let lowerName = name.lowercased()
-            return lowerName.contains("ipad") || 
-                   lowerName.contains("apple mobile device") ||
-                   // Additional checks for iPad Pro models
-                   productID == 0x12a8 || // iPad Pro 12.9" (1st gen)
-                   productID == 0x12ab || // iPad Pro 9.7"
-                   productID == 0x13a1 || // iPad Pro 10.5"
-                   productID == 0x13a2 || // iPad Pro 12.9" (2nd gen)
-                   productID == 0x13a3 || // iPad Pro 11"
-                   productID == 0x13a4 || // iPad Pro 12.9" (3rd gen)
-                   productID == 0x13a5 || // iPad Pro 11" (2nd gen)
-                   productID == 0x13a6 || // iPad Pro 12.9" (4th gen)
-                   productID == 0x13a7 || // iPad Pro 11" (3rd gen)
-                   productID == 0x13a8 || // iPad Pro 12.9" (5th gen)
-                   productID == 0x13a9 || // iPad Pro 11" (4th gen)
-                   productID == 0x13aa || // iPad Pro 12.9" (6th gen)
-                   productID == 0x13ab || // iPad Pro 11" (5th gen)
-                   productID == 0x13ac || // iPad Pro 12.9" (7th gen)
-                   productID == 0x13ad    // iPad Pro 11" (6th gen)
-        }
-        return false
+        guard vendorID == 0x05ac else { return false }
+        let lowerName = name.lowercased()
+        return lowerName.contains("ipad")
     }
 }
 
@@ -173,19 +152,13 @@ class USBMonitor {
             0
         )?.takeRetainedValue() as? String
         
-        // Try to get device name from IORegistry
-        var deviceName = "Unknown Device"
-        if let nameRef = IORegistryEntryCreateCFProperty(
+        // Get device name from IORegistry
+        let deviceName = IORegistryEntryCreateCFProperty(
             device,
             "USB Product Name" as CFString,
             kCFAllocatorDefault,
             0
-        )?.takeRetainedValue() as? String {
-            deviceName = nameRef
-        } else {
-            // Fallback: use system_profiler to get device name
-            deviceName = getDeviceNameViaSystemProfiler(vendorID: vendorID, productID: productID)
-        }
+        )?.takeRetainedValue() as? String ?? "USB Device"
         
         return USBDeviceInfo(
             name: deviceName,
@@ -195,46 +168,5 @@ class USBMonitor {
         )
     }
     
-    private func getDeviceNameViaSystemProfiler(vendorID: UInt16, productID: UInt16) -> String {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/sbin/system_profiler")
-        task.arguments = ["SPUSBDataType", "-xml"]
-        
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        
-        do {
-            try task.run()
-            task.waitUntilExit()
-            
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [[String: Any]],
-               let items = plist.first?["_items"] as? [[String: Any]] {
-                return findDeviceName(in: items, vendorID: vendorID, productID: productID) ?? "USB Device"
-            }
-        } catch {
-            Logger().log("Failed to run system_profiler: \(error.localizedDescription)")
-        }
-        
-        return "USB Device"
-    }
-    
-    private func findDeviceName(in items: [[String: Any]], vendorID: UInt16, productID: UInt16) -> String? {
-        for item in items {
-            if let itemVendorID = item["vendor_id"] as? Int,
-               let itemProductID = item["product_id"] as? Int,
-               UInt16(itemVendorID) == vendorID,
-               UInt16(itemProductID) == productID,
-               let name = item["_name"] as? String {
-                return name
-            }
-            
-            if let subItems = item["_items"] as? [[String: Any]],
-               let name = findDeviceName(in: subItems, vendorID: vendorID, productID: productID) {
-                return name
-            }
-        }
-        return nil
-    }
 }
 

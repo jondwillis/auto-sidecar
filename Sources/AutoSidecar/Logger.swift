@@ -33,10 +33,9 @@ class Logger {
         // Print to console
         print(logMessage, terminator: "")
         
-        // Write to file
+        // Write to file - let OS handle buffering for better energy efficiency
         if let data = logMessage.data(using: .utf8) {
             fileHandle?.write(data)
-            fileHandle?.synchronizeFile()
         }
     }
     

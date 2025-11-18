@@ -14,7 +14,8 @@ cd "$SCRIPT_DIR"
 
 # Build in release mode for optimal performance
 echo "Building release binary..."
-swift build -c release
+# Use Xcode's toolchain to match the SDK version
+xcrun --toolchain default swift build -c release
 
 if [ $? -ne 0 ]; then
     echo "Error: Build failed"
@@ -36,15 +37,15 @@ mkdir -p "$LAUNCH_AGENTS_DIR"
 # Update plist with correct user home path
 sed "s|/Users/jon|$HOME|g" "$SCRIPT_DIR/$PLIST_NAME" > "$LAUNCH_AGENTS_DIR/$PLIST_NAME"
 
-# Unload existing agent if running
-if launchctl list | grep -q "$PLIST_NAME"; then
-    echo "Unloading existing LaunchAgent..."
-    launchctl unload "$LAUNCH_AGENTS_DIR/$PLIST_NAME" 2>/dev/null || true
+# Unload existing agent if running (using modern launchctl syntax)
+if launchctl list | grep -q "com.jonwillis.autosidecar"; then
+    echo "Stopping existing LaunchAgent..."
+    launchctl bootout gui/$(id -u) "$LAUNCH_AGENTS_DIR/$PLIST_NAME" 2>/dev/null || true
 fi
 
-# Load the LaunchAgent
+# Load the LaunchAgent (using modern launchctl syntax)
 echo "Loading LaunchAgent..."
-launchctl load "$LAUNCH_AGENTS_DIR/$PLIST_NAME"
+launchctl bootstrap gui/$(id -u) "$LAUNCH_AGENTS_DIR/$PLIST_NAME"
 
 echo ""
 echo "Installation complete!"
@@ -53,10 +54,10 @@ echo "The Auto Sidecar daemon is now running."
 echo "Logs are available at: $HOME/Library/Logs/auto-sidecar.log"
 echo ""
 echo "To stop the daemon:"
-echo "  launchctl unload $LAUNCH_AGENTS_DIR/$PLIST_NAME"
+echo "  launchctl bootout gui/\$(id -u) $LAUNCH_AGENTS_DIR/$PLIST_NAME"
 echo ""
 echo "To start the daemon:"
-echo "  launchctl load $LAUNCH_AGENTS_DIR/$PLIST_NAME"
+echo "  launchctl bootstrap gui/\$(id -u) $LAUNCH_AGENTS_DIR/$PLIST_NAME"
 echo ""
 echo "IMPORTANT: You may need to grant Accessibility permissions:"
 echo "  System Settings > Privacy & Security > Accessibility"
