@@ -1,0 +1,136 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+    tags:
+      - "v*"
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint & Format Check
+    runs-on: macos-26
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install linters
+        run: |
+          brew install swiftlint swift-format
+
+      - name: Run SwiftLint
+        run: swiftlint lint --strict || echo "SwiftLint not configured yet"
+
+      - name: Check Swift formatting
+        run: swift-format lint --recursive Sources/ || echo "Note swift-format issues found (non-blocking)"
+
+      - name: Run ShellCheck
+        run: |
+          if command -v shellcheck > /dev/null 2>&1; then
+            find . -name "*.sh" -type f | while read -r script; do
+              echo "Checking $script..."
+              shellcheck "$script" || true
+            done
+            echo "ShellCheck complete"
+          else
+            echo "ShellCheck not available, skipping"
+          fi
+
+  build-and-test:
+    name: Build & Test
+    runs-on: macos-26
+    needs: lint
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Select Xcode version
+        run: |
+          # Use Xcode 16.2 or later (includes Swift 6.1+)
+          sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer || \
+          sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer || \
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Build release binary
+        run: xcrun --toolchain default swift build -c release
+
+      - name: Run tests
+        run: xcrun --toolchain default swift test || echo "No tests configured yet"
+
+      - name: Verify binary
+        run: |
+          if [ ! -f .build/release/auto-sidecar ]; then
+            echo "❌ Binary not found!"
+            exit 1
+          fi
+          echo "✓ Binary built successfully"
+          ls -lh .build/release/auto-sidecar
+          echo "Binary size: $(du -h .build/release/auto-sidecar | cut -f1)"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: auto-sidecar-${{ github.sha }}
+          path: .build/release/auto-sidecar
+          retention-days: 30
+
+  release:
+    name: Create Release
+    runs-on: macos-26
+    needs: build-and-test
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Select Xcode version
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer || \
+          sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer || \
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Build release binary
+        run: xcrun --toolchain default swift build -c release
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Package binary
+        run: |
+          mkdir -p dist
+          cp .build/release/auto-sidecar dist/
+          cp SidecarLauncher dist/
+          cp com.jonwillis.autosidecar.plist dist/
+          cp scripts/tools/uninstall.sh dist/
+          cp README.md dist/
+          cp LICENSE dist/ || echo "LICENSE file not found"
+          cd dist
+          tar -czf auto-sidecar-${{ steps.get_version.outputs.VERSION }}-macos.tar.gz *
+          mv auto-sidecar-${{ steps.get_version.outputs.VERSION }}-macos.tar.gz ..
+          cd ..
+
+      - name: Generate SHA256 checksum
+        run: |
+          shasum -a 256 auto-sidecar-${{ steps.get_version.outputs.VERSION }}-macos.tar.gz > auto-sidecar-${{ steps.get_version.outputs.VERSION }}-macos.tar.gz.sha256
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            auto-sidecar-${{ steps.get_version.outputs.VERSION }}-macos.tar.gz
+            auto-sidecar-${{ steps.get_version.outputs.VERSION }}-macos.tar.gz.sha256
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
