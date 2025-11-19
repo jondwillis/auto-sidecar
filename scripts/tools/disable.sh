@@ -8,5 +8,5 @@ echo "✓ Auto Sidecar activation DISABLED"
 echo ""
 echo "The app is still running but won't activate Sidecar automatically."
 echo "You can also toggle this from the menu bar icon."
-echo "To re-enable, run: ./enable.sh"
+echo "To re-enable, run: swift package dev-tools enable"
 

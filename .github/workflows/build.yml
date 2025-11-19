@@ -21,8 +21,10 @@ jobs:
     - name: Build release binary
       run: xcrun --toolchain default swift build -c release
       
-    - name: Run tests
-      run: swift test || echo "No tests yet"
+    - name: Check binary size
+      run: |
+        ls -lh .build/release/auto-sidecar
+        echo "Binary size: $(du -h .build/release/auto-sidecar | cut -f1)"
       
     - name: Check binary exists
       run: |

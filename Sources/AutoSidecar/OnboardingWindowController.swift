@@ -1,7 +1,10 @@
 import Cocoa
 import ServiceManagement
+import OSLog
 
-class OnboardingWindowController: NSWindowController {
+/// Onboarding window controller with modern async patterns
+@MainActor
+final class OnboardingWindowController: NSWindowController {
     private var contentView: OnboardingView!
     
     init() {
@@ -31,7 +34,8 @@ class OnboardingWindowController: NSWindowController {
     }
 }
 
-class OnboardingView: NSView {
+@MainActor
+final class OnboardingView: NSView {
     weak var windowController: OnboardingWindowController?
     
     private let titleLabel = NSTextField(labelWithString: "Welcome to Auto Sidecar")
@@ -55,7 +59,9 @@ class OnboardingView: NSView {
         
         // Start a timer to check accessibility status
         Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            self?.updateAccessibilityStatus()
+            Task { @MainActor in
+                self?.updateAccessibilityStatus()
+            }
         }
     }
     
@@ -163,14 +169,16 @@ class OnboardingView: NSView {
         Preferences.shared.launchAtLogin = enabled
         
         if #available(macOS 13.0, *) {
-            do {
-                if enabled {
-                    try SMAppService.mainApp.register()
-                } else {
-                    try SMAppService.mainApp.unregister()
+            Task {
+                do {
+                    if enabled {
+                        try SMAppService.mainApp.register()
+                    } else {
+                        try await SMAppService.mainApp.unregister()
+                    }
+                } catch {
+                    await Logger.shared.error("Failed to update launch at login: \(error.localizedDescription)")
                 }
-            } catch {
-                logger.log("Failed to update launch at login: \(error.localizedDescription)")
             }
         }
     }

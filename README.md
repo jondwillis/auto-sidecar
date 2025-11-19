@@ -25,7 +25,7 @@ Modern macOS app that automatically activates Sidecar when your iPad is connecte
 ```bash
 git clone https://github.com/yourusername/auto-continuity.git
 cd auto-continuity
-./build-app.sh
+swift package build-app
 ```
 
 Then drag `Auto Sidecar.app` to your `/Applications` folder and launch it.
@@ -53,14 +53,6 @@ Then drag `Auto Sidecar.app` to your `/Applications` folder and launch it.
 - Failure tracking with automatic retry limiting
 - Works through USB hubs
 - Persistent preferences
-
-## Troubleshooting
-
-
-Quick diagnostic check:
-```bash
-./diagnose-devices.sh
-```
 
 ## Usage
 
@@ -126,6 +118,12 @@ Check logs: `tail -f ~/Library/Logs/auto-sidecar.log`
 
 ## Uninstallation
 
+Quick method:
+```bash
+./scripts/tools/uninstall.sh
+```
+
+Manual method:
 1. Quit Auto Sidecar from the menu bar
 2. Move `Auto Sidecar.app` to Trash (from `/Applications`)
 3. Remove preferences (optional):
@@ -138,15 +136,57 @@ Check logs: `tail -f ~/Library/Logs/auto-sidecar.log`
 
 ## Development
 
-```bash
-swift build                 # Debug build
-swift build -c release      # Release build
-./build-app.sh              # Build .app bundle
-./build.sh                  # Build CLI version (legacy)
+Auto Sidecar uses **Swift Package Manager plugins** for idiomatic Swift development:
 
-# Run from Xcode
-open Package.swift          # Open in Xcode
+```bash
+# Quick Start
+swift package plugin --list          # List available plugins
+
+# Building
+swift package build-app              # Build .app bundle
+swift build                          # Debug build
+swift build -c release               # Release build
+
+# Development Tools
+swift package dev-tools help         # Show all dev commands
+swift package dev-tools validate     # Run validation checks
+swift package dev-tools diagnose     # Comprehensive diagnostics
+swift package dev-tools test         # Device detection tests
+swift package dev-tools status       # Show app status
+swift package dev-tools enable       # Enable auto-activation
+swift package dev-tools disable      # Disable auto-activation
+swift package dev-tools check        # Check permissions
+swift package dev-tools dev-setup    # Setup git hooks
+
+# Standard SPM commands
+swift test                           # Run tests
+swift package clean                  # Clean build artifacts
 ```
+
+### Project Structure
+
+```
+auto-continuity/
+├── Sources/AutoSidecar/     # Swift source files
+├── Plugins/                 # SPM command plugins
+│   ├── BuildAppPlugin/      # App bundle builder
+│   └── DevToolsPlugin/      # Development tools
+├── scripts/                 # Shell scripts (called by plugins)
+│   ├── build/               # Build scripts
+│   ├── tools/               # User-facing tools
+│   └── dev/                 # Development utilities
+├── Resources/               # App resources (Info.plist)
+└── Package.swift            # SPM configuration with plugins
+```
+
+### Git Hooks
+
+Setup pre-push validation:
+```bash
+swift package dev-tools dev-setup
+```
+
+This installs a git hook that runs validation before every push.
 
 ## Limitations
 

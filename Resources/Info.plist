@@ -19,13 +19,13 @@
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
-    <string>13.0</string>
+    <string>14.0</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSPrincipalClass</key>
-    <string>NSApplication</string>
+    <string>AppDelegate</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>Auto Sidecar needs to control Sidecar to automatically connect your iPad.</string>
     <key>NSSystemAdministrationUsageDescription</key>

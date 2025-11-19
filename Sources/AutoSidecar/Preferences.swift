@@ -1,11 +1,14 @@
 import Foundation
+import Observation
 
-class Preferences {
+/// Observable preferences using modern @Observable macro
+@available(macOS 14.0, *)
+@Observable
+final class Preferences {
     static let shared = Preferences()
     
     private let defaults = UserDefaults.standard
     
-    // Keys
     private enum Keys {
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
         static let isAutoActivationEnabled = "isAutoActivationEnabled"
@@ -14,12 +17,20 @@ class Preferences {
     }
     
     var hasCompletedOnboarding: Bool {
-        get { defaults.bool(forKey: Keys.hasCompletedOnboarding) }
-        set { defaults.set(newValue, forKey: Keys.hasCompletedOnboarding) }
+        get {
+            access(keyPath: \.hasCompletedOnboarding)
+            return defaults.bool(forKey: Keys.hasCompletedOnboarding)
+        }
+        set {
+            withMutation(keyPath: \.hasCompletedOnboarding) {
+                defaults.set(newValue, forKey: Keys.hasCompletedOnboarding)
+            }
+        }
     }
     
     var isAutoActivationEnabled: Bool {
-        get { 
+        get {
+            access(keyPath: \.isAutoActivationEnabled)
             // Check for legacy file flag first
             let legacyDisableFlagPath = NSHomeDirectory() + "/Library/Preferences/.auto-sidecar-disabled"
             if FileManager.default.fileExists(atPath: legacyDisableFlagPath) {
@@ -27,22 +38,40 @@ class Preferences {
             }
             return defaults.object(forKey: Keys.isAutoActivationEnabled) as? Bool ?? true
         }
-        set { 
-            defaults.set(newValue, forKey: Keys.isAutoActivationEnabled)
-            // Remove legacy flag if it exists
-            let legacyDisableFlagPath = NSHomeDirectory() + "/Library/Preferences/.auto-sidecar-disabled"
-            try? FileManager.default.removeItem(atPath: legacyDisableFlagPath)
+        set {
+            withMutation(keyPath: \.isAutoActivationEnabled) {
+                defaults.set(newValue, forKey: Keys.isAutoActivationEnabled)
+                // Remove legacy flag if it exists
+                let legacyDisableFlagPath = NSHomeDirectory() + "/Library/Preferences/.auto-sidecar-disabled"
+                try? FileManager.default.removeItem(atPath: legacyDisableFlagPath)
+            }
         }
     }
     
     var shouldDisconnectOnUSBRemoval: Bool {
-        get { defaults.bool(forKey: Keys.shouldDisconnectOnUSBRemoval) }
-        set { defaults.set(newValue, forKey: Keys.shouldDisconnectOnUSBRemoval) }
+        get {
+            access(keyPath: \.shouldDisconnectOnUSBRemoval)
+            return defaults.bool(forKey: Keys.shouldDisconnectOnUSBRemoval)
+        }
+        set {
+            withMutation(keyPath: \.shouldDisconnectOnUSBRemoval) {
+                defaults.set(newValue, forKey: Keys.shouldDisconnectOnUSBRemoval)
+            }
+        }
     }
     
     var launchAtLogin: Bool {
-        get { defaults.bool(forKey: Keys.launchAtLogin) }
-        set { defaults.set(newValue, forKey: Keys.launchAtLogin) }
+        get {
+            access(keyPath: \.launchAtLogin)
+            return defaults.bool(forKey: Keys.launchAtLogin)
+        }
+        set {
+            withMutation(keyPath: \.launchAtLogin) {
+                defaults.set(newValue, forKey: Keys.launchAtLogin)
+            }
+        }
     }
+    
+    private init() {}
 }
 

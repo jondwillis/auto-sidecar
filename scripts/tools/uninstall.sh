@@ -61,7 +61,7 @@ echo ""
 echo "If you added it to Login Items, remove it from:"
 echo "  System Settings > General > Login Items"
 echo ""
-echo "To reinstall, run: ./build.sh"
+echo "To reinstall, run: swift package build-app"
 echo ""
 
 

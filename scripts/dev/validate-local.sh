@@ -6,7 +6,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$REPO_ROOT"
 
 echo "Local Validation Checks"
 echo "======================="
@@ -18,7 +19,7 @@ FAILURES=0
 # 1. Shell script syntax
 echo "1. Validating shell scripts..."
 echo "   ---------------------------"
-for script in *.sh; do
+for script in scripts/build/*.sh scripts/tools/*.sh scripts/dev/*.sh; do
   if [ -f "$script" ]; then
     if bash -n "$script" 2>&1; then
       echo "   ✓ $script"
@@ -33,7 +34,7 @@ echo ""
 # 2. Check permissions
 echo "2. Checking file permissions..."
 echo "   ----------------------------"
-for script in build.sh uninstall.sh enable.sh disable.sh status.sh test-ci.sh validate-local.sh; do
+for script in scripts/build/*.sh scripts/tools/*.sh scripts/dev/*.sh; do
   if [ -f "$script" ]; then
     if [ -x "$script" ]; then
       echo "   ✓ $script is executable"
@@ -90,8 +91,10 @@ required_files=(
   "Package.swift"
   "README.md"
   "LICENSE"
-  "build.sh"
-  "uninstall.sh"
+  "Plugins/BuildAppPlugin/BuildAppPlugin.swift"
+  "Plugins/DevToolsPlugin/DevToolsPlugin.swift"
+  "scripts/build/build-app.sh"
+  "scripts/tools/uninstall.sh"
   "com.jonwillis.autosidecar.plist"
   "Sources/AutoSidecar/main.swift"
   "Sources/AutoSidecar/USBMonitor.swift"

@@ -1,0 +1,107 @@
+---
+description: Enforce modern Swift concurrency, observation, and idiomatic patterns
+always: true
+---
+
+# Modern Swift Development Patterns
+
+## Concurrency & Asynchronous Programming
+
+**Always use Swift Concurrency over legacy patterns:**
+- Use `async/await` instead of completion handlers and callbacks
+- Use `AsyncStream` for event-driven sequences instead of delegate patterns or callbacks
+- Use `Task` and structured concurrency instead of `DispatchQueue.async`
+- Use `Task.sleep(for:)` instead of `Thread.sleep()` or `DispatchQueue.asyncAfter`
+- Use `@MainActor` for UI-bound types and methods instead of `DispatchQueue.main.async`
+
+**Thread Safety:**
+- Use `actor` for types requiring isolated mutable state
+- Use `@Sendable` closures for cross-concurrency-domain boundaries
+- Mark value types as `Sendable` when they can safely cross concurrency boundaries
+- Avoid manual locks and semaphores; use actors and structured concurrency
+
+## State Management & Observation
+
+**Modern Observation Framework:**
+- Use `@Observable` macro for observable state containers (not `ObservableObject`)
+- Use `withObservationTracking` for manual observation instead of `NotificationCenter`
+- Remove manual `@Published` properties - `@Observable` handles this automatically
+- Avoid `NotificationCenter` for state changes; use `@Observable` or Combine publishers
+
+**SwiftUI State:**
+- Use `@State`, `@Binding`, `@Environment` for SwiftUI state
+- Use `@Observable` for shared model objects
+- Prefer composition and unidirectional data flow
+
+## Logging & Diagnostics
+
+**Modern Structured Logging:**
+- Use `OSLog` and `Logger` from `os` framework instead of `print()` or custom file loggers
+- Structure log messages with appropriate privacy levels
+- Use appropriate log levels (`.debug`, `.info`, `.error`, `.fault`)
+- Example: `logger.log(level: .info, "\(message, privacy: .public)")`
+
+## Imperative → Reactive Patterns
+
+**Avoid:**
+- Completion handler callbacks: `(Result) -> Void` or `(Bool) -> Void`
+- Manual `DispatchQueue` usage for async operations
+- Manual retain cycles with `[weak self]` in callbacks (use structured concurrency)
+- Timer-based polling (use AsyncStream or Combine)
+- `NSNotificationCenter` for custom events (use `@Observable`)
+
+**Prefer:**
+- `async throws -> T` for async operations
+- `AsyncStream<T>` or `AsyncSequence` for streaming data
+- `@Observable` for observable state
+- Structured concurrency with `Task`, `TaskGroup`
+
+## Type Safety & Modern Patterns
+
+**Value Semantics:**
+- Prefer `struct` over `class` when value semantics are appropriate
+- Use `final` for classes that shouldn't be subclassed
+- Use `enum` for discriminated unions instead of boolean flags or subclassing
+
+**Modern Swift Syntax:**
+- Use `guard let self else { return }` instead of `guard let self = self`
+- Use `if let`, `guard let`, and optional chaining instead of force unwrapping
+- Use result builders where appropriate (SwiftUI, async sequences)
+- Use property wrappers for cross-cutting concerns
+
+## SwiftUI over AppKit/UIKit
+
+**When feasible, prefer SwiftUI:**
+- Use SwiftUI views instead of `NSView`/`UIView` subclasses
+- Use SwiftUI `@Observable` models instead of manual KVO
+- Use SwiftUI navigation instead of `NSViewController`/`UIViewController` manually managed stacks
+- For mixed codebases, wrap AppKit/UIKit in `NSViewRepresentable`/`UIViewRepresentable`
+
+**AppKit/UIKit Modernization:**
+- When AppKit/UIKit is required, still use `async/await` in event handlers
+- Use `@MainActor` annotations for view controllers
+- Avoid nested closures; prefer structured async code
+
+## Error Handling
+
+**Structured Error Handling:**
+- Use `async throws` instead of completion handlers with `Result<T, Error>`
+- Define specific error types conforming to `Error`
+- Use `do-catch` for recoverable errors, not optional returns
+- Log errors with structured logging (OSLog)
+
+## API Design Principles
+
+**Modern Swift API Design:**
+- Design APIs to be async-first when performing I/O or long-running work
+- Return values directly from async functions instead of callbacks
+- Use property observers (`didSet`, `willSet`) instead of manual change notifications
+- Use computed properties over getter methods when no side effects
+
+## Testing
+
+**Testable Async Code:**
+- Use `await` in async test methods
+- Inject dependencies to enable mocking actors and async functions
+- Avoid global singletons; prefer dependency injection
+- Test async sequences with finite streams

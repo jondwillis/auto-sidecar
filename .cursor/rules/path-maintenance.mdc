@@ -1,0 +1,24 @@
+---
+description: Update paths when moving files
+globs: **/*
+---
+
+# Path Maintenance
+
+When moving files, especially scripts, dev utilities, or configuration files, you MUST ensure that all references to these files are updated throughout the codebase.
+
+## Checklist
+
+- [ ] **Shell Scripts**: Check other scripts for hardcoded paths to the moved file.
+- [ ] **Git Hooks**: Check `.git/hooks/*` and any scripts that install git hooks (e.g., `scripts/dev/install-git-hooks.sh`).
+- [ ] **CI/CD**: Check CI/CD configuration files (e.g., GitHub Actions workflows).
+- [ ] **Documentation**: Update any paths in READMEs or other documentation.
+- [ ] **Build Settings**: Check Xcode project settings or Package.swift if applicable.
+
+## Example
+
+If moving `validate-local.sh` from root to `scripts/dev/`:
+
+1. Update `.git/hooks/pre-push` to point to `$REPO_ROOT/scripts/dev/validate-local.sh`.
+2. Update `scripts/dev/install-git-hooks.sh` to install the hook with the correct path.
+3. Search the codebase for `validate-local.sh` to find any other references.

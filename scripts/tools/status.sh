@@ -29,9 +29,9 @@ tail -10 ~/Library/Logs/auto-sidecar.log 2>/dev/null || echo "No log file found"
 
 echo ""
 echo "Commands:"
-echo "  /usr/local/bin/auto-sidecar - Start the app"
-echo "  ./disable.sh - Disable auto-activation"
-echo "  ./enable.sh  - Enable auto-activation"
-echo "  ./status.sh  - Show this status"
+echo "  swift package dev-tools status   - Show this status"
+echo "  swift package dev-tools enable   - Enable auto-activation"
+echo "  swift package dev-tools disable  - Disable auto-activation"
+echo "  swift package dev-tools diagnose - Run diagnostics"
 echo "  tail -f ~/Library/Logs/auto-sidecar.log - Watch logs"
 

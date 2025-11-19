@@ -1,0 +1,5 @@
+# Workflow artifacts
+*.log
+test-results/
+
+

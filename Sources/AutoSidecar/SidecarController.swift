@@ -1,10 +1,8 @@
 import Foundation
 
-class SidecarController {
-    private let logger = Logger()
+/// Modern Sidecar controller using async/await
+actor SidecarController {
     private var cachedDeviceName: String?
-    private var lastDeviceListAttempt: Date?
-    private let deviceListRetryInterval: TimeInterval = 2.0
     private var hasLoggedDiagnostics = false
     
     private let launcherPath: String = {
@@ -27,106 +25,81 @@ class SidecarController {
     }()
     
     init() {
-        logSystemDiagnostics()
+        Task {
+            await logSystemDiagnostics()
+        }
     }
     
-    private func logSystemDiagnostics() {
+    private func logSystemDiagnostics() async {
         guard !hasLoggedDiagnostics else { return }
         hasLoggedDiagnostics = true
         
-        logger.log("=== Sidecar System Diagnostics ===")
-        logger.log("SidecarLauncher path: \(launcherPath)")
-        logger.log("SidecarLauncher exists: \(FileManager.default.fileExists(atPath: launcherPath))")
+        await Logger.shared.info("=== Sidecar System Diagnostics ===")
+        await Logger.shared.info("SidecarLauncher path: \(launcherPath)")
+        await Logger.shared.info("SidecarLauncher exists: \(FileManager.default.fileExists(atPath: launcherPath))")
         
         // Check for common issues
         if !FileManager.default.fileExists(atPath: launcherPath) {
-            logger.log("⚠️  WARNING: SidecarLauncher not found!")
-            logger.log("   Run diagnose-devices.sh to troubleshoot")
+            await Logger.shared.error("⚠️  WARNING: SidecarLauncher not found!")
+            await Logger.shared.error("   Run diagnose-devices.sh to troubleshoot")
         }
         
         // Log macOS version
         let version = ProcessInfo.processInfo.operatingSystemVersion
-        logger.log("macOS Version: \(version.majorVersion).\(version.minorVersion).\(version.patchVersion)")
+        await Logger.shared.info("macOS Version: \(version.majorVersion).\(version.minorVersion).\(version.patchVersion)")
         
-        logger.log("=== End Diagnostics ===")
+        await Logger.shared.info("=== End Diagnostics ===")
     }
     
     // Check if Sidecar is currently connected
-    func isConnected(completion: @escaping (Bool) -> Void) {
+    func isConnected() async -> Bool {
         guard FileManager.default.fileExists(atPath: launcherPath) else {
-            completion(false)
-            return
+            return false
         }
         
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else {
-                DispatchQueue.main.async { completion(false) }
-                return
-            }
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: launcherPath)
+        task.arguments = ["status"]
+        
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = pipe
+        
+        do {
+            try task.run()
+            task.waitUntilExit()
             
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: self.launcherPath)
-            task.arguments = ["status"]
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: data, encoding: .utf8) ?? ""
             
-            let pipe = Pipe()
-            task.standardOutput = pipe
-            task.standardError = pipe
-            
-            do {
-                try task.run()
-                task.waitUntilExit()
-                
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                let output = String(data: data, encoding: .utf8) ?? ""
-                
-                // If status shows "Connected" or similar, it's connected
-                let isConnected = output.lowercased().contains("connected")
-                DispatchQueue.main.async {
-                    completion(isConnected)
-                }
-            } catch {
-                DispatchQueue.main.async { completion(false) }
-            }
+            // If status shows "Connected" or similar, it's connected
+            return output.lowercased().contains("connected")
+        } catch {
+            return false
         }
     }
     
     // Connect to Sidecar using SidecarLauncher binary
-    func enableSidecar(completion: @escaping (Bool) -> Void) {
+    func enableSidecar() async -> Bool {
         guard FileManager.default.fileExists(atPath: launcherPath) else {
-            logger.log("SidecarLauncher not found at \(launcherPath)")
-            completion(false)
-            return
+            await Logger.shared.error("SidecarLauncher not found at \(launcherPath)")
+            return false
         }
         
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            
-            let success = self.connectViaSidecarLauncher()
-            DispatchQueue.main.async {
-                completion(success)
-            }
-        }
+        return await connectViaSidecarLauncher()
     }
     
     // Disconnect Sidecar
-    func disableSidecar(completion: @escaping (Bool) -> Void) {
+    func disableSidecar() async -> Bool {
         guard FileManager.default.fileExists(atPath: launcherPath) else {
-            logger.log("SidecarLauncher not found at \(launcherPath)")
-            completion(false)
-            return
+            await Logger.shared.error("SidecarLauncher not found at \(launcherPath)")
+            return false
         }
         
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            
-            let success = self.disconnectViaSidecarLauncher()
-            DispatchQueue.main.async {
-                completion(success)
-            }
-        }
+        return await disconnectViaSidecarLauncher()
     }
     
-    private func listDevices(maxRetries: Int = 3) -> String? {
+    private func listDevices(maxRetries: Int = 3) async -> String? {
         for attempt in 1...maxRetries {
             let listTask = Process()
             listTask.executableURL = URL(fileURLWithPath: launcherPath)
@@ -137,7 +110,7 @@ class SidecarController {
             listTask.standardError = listPipe
             
             do {
-                logger.log("Listing Sidecar devices (attempt \(attempt)/\(maxRetries))...")
+                await Logger.shared.info("Listing Sidecar devices (attempt \(attempt)/\(maxRetries))...")
                 try listTask.run()
                 listTask.waitUntilExit()
                 
@@ -145,24 +118,24 @@ class SidecarController {
                 let listOutput = String(data: listData, encoding: .utf8) ?? ""
                 
                 let exitCode = listTask.terminationStatus
-                logger.log("SidecarLauncher devices exit code: \(exitCode)")
+                await Logger.shared.info("SidecarLauncher devices exit code: \(exitCode)")
                 if !listOutput.isEmpty {
-                    logger.log("SidecarLauncher devices output:\n\(listOutput)")
+                    await Logger.shared.info("SidecarLauncher devices output:\n\(listOutput)")
                 }
                 
                 // Exit code 2 means no reachable devices
                 if exitCode == 2 {
-                    logger.log("⚠️  No reachable Sidecar devices (exit code 2)")
+                    await Logger.shared.log("⚠️  No reachable Sidecar devices (exit code 2)")
                     if attempt == 1 {
-                        logger.log("Troubleshooting tips:")
-                        logger.log("  • Ensure iPad is unlocked and connected via USB")
-                        logger.log("  • Check that WiFi and Bluetooth are enabled")
-                        logger.log("  • Verify Handoff is enabled (System Settings > General > AirDrop & Handoff)")
-                        logger.log("  • Run diagnose-devices.sh for detailed diagnostics")
+                        await Logger.shared.info("Troubleshooting tips:")
+                        await Logger.shared.info("  • Ensure iPad is unlocked and connected via USB")
+                        await Logger.shared.info("  • Check that WiFi and Bluetooth are enabled")
+                        await Logger.shared.info("  • Verify Handoff is enabled (System Settings > General > AirDrop & Handoff)")
+                        await Logger.shared.info("  • Run diagnose-devices.sh for detailed diagnostics")
                     }
                     if attempt < maxRetries {
-                        logger.log("Waiting 2 seconds before retry...")
-                        Thread.sleep(forTimeInterval: 2.0)
+                        await Logger.shared.info("Waiting 2 seconds before retry...")
+                        try? await Task.sleep(for: .seconds(2))
                         continue
                     }
                     return nil
@@ -170,17 +143,17 @@ class SidecarController {
                 
                 // Exit code 4 means SidecarCore private error
                 if exitCode == 4 {
-                    logger.log("⚠️  SidecarCore private error encountered (exit code 4)")
+                    await Logger.shared.log("⚠️  SidecarCore private error encountered (exit code 4)")
                     if attempt == 1 {
-                        logger.log("This usually indicates a system-level issue with Sidecar.")
-                        logger.log("Troubleshooting tips:")
-                        logger.log("  • Restart your Mac")
-                        logger.log("  • Sign out and back into iCloud")
-                        logger.log("  • Ensure iPad and Mac are on the same iCloud account")
+                        await Logger.shared.info("This usually indicates a system-level issue with Sidecar.")
+                        await Logger.shared.info("Troubleshooting tips:")
+                        await Logger.shared.info("  • Restart your Mac")
+                        await Logger.shared.info("  • Sign out and back into iCloud")
+                        await Logger.shared.info("  • Ensure iPad and Mac are on the same iCloud account")
                     }
                     if attempt < maxRetries {
-                        logger.log("Waiting 2 seconds before retry...")
-                        Thread.sleep(forTimeInterval: 2.0)
+                        await Logger.shared.info("Waiting 2 seconds before retry...")
+                        try? await Task.sleep(for: .seconds(2))
                         continue
                     }
                     return nil
@@ -191,25 +164,25 @@ class SidecarController {
                 let nonEmptyLines = lines.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
                 
                 if let ipadName = nonEmptyLines.first(where: { $0.contains("iPad") })?.trimmingCharacters(in: .whitespacesAndNewlines) {
-                    logger.log("✓ Found iPad via SidecarLauncher: \(ipadName)")
+                    await Logger.shared.info("✓ Found iPad via SidecarLauncher: \(ipadName)")
                     return ipadName
                 } else {
-                    logger.log("⚠️  No iPad found in device list output")
+                    await Logger.shared.log("⚠️  No iPad found in device list output")
                     if !nonEmptyLines.isEmpty {
-                        logger.log("Available devices:")
+                        await Logger.shared.info("Available devices:")
                         for line in nonEmptyLines {
-                            logger.log("  • \(line)")
+                            await Logger.shared.info("  • \(line)")
                         }
                     }
                     if attempt < maxRetries {
-                        Thread.sleep(forTimeInterval: 2.0)
+                        try? await Task.sleep(for: .seconds(2))
                         continue
                     }
                 }
             } catch {
-                logger.log("❌ Failed to run SidecarLauncher devices: \(error.localizedDescription)")
+                await Logger.shared.error("❌ Failed to run SidecarLauncher devices: \(error.localizedDescription)")
                 if attempt < maxRetries {
-                    Thread.sleep(forTimeInterval: 2.0)
+                    try? await Task.sleep(for: .seconds(2))
                     continue
                 }
             }
@@ -218,10 +191,10 @@ class SidecarController {
         return nil
     }
     
-    private func connectViaSidecarLauncher() -> Bool {
+    private func connectViaSidecarLauncher() async -> Bool {
         // List devices with retry logic
-        guard let ipadName = listDevices() else {
-            logger.log("❌ No iPad found after retries")
+        guard let ipadName = await listDevices() else {
+            await Logger.shared.error("❌ No iPad found after retries")
             return false
         }
         
@@ -238,7 +211,7 @@ class SidecarController {
         connectTask.standardError = connectPipe
         
         do {
-            logger.log("Connecting to \(ipadName)...")
+            await Logger.shared.info("Connecting to \(ipadName)...")
             try connectTask.run()
             connectTask.waitUntilExit()
             
@@ -246,40 +219,40 @@ class SidecarController {
             let connectOutput = String(data: connectData, encoding: .utf8) ?? ""
             
             let exitCode = connectTask.terminationStatus
-            logger.log("SidecarLauncher connect exit code: \(exitCode)")
+            await Logger.shared.info("SidecarLauncher connect exit code: \(exitCode)")
             if !connectOutput.isEmpty {
-                logger.log("SidecarLauncher connect output:\n\(connectOutput)")
+                await Logger.shared.info("SidecarLauncher connect output:\n\(connectOutput)")
             }
             
             if exitCode == 0 {
-                logger.log("✓ Sidecar connected successfully via SidecarLauncher")
+                await Logger.shared.info("✓ Sidecar connected successfully via SidecarLauncher")
                 return true
             } else {
                 // Check if error is "already in use" - that means it's already connected!
                 if connectOutput.contains("AlreadyInUse") || connectOutput.contains("already") {
-                    logger.log("✓ Sidecar already connected (AlreadyInUse error)")
+                    await Logger.shared.info("✓ Sidecar already connected (AlreadyInUse error)")
                     return true
                 }
-                logger.log("❌ SidecarLauncher connection failed (exit code \(exitCode)): \(connectOutput)")
+                await Logger.shared.error("❌ SidecarLauncher connection failed (exit code \(exitCode)): \(connectOutput)")
                 return false
             }
         } catch {
-            logger.log("❌ Failed to run SidecarLauncher connect: \(error.localizedDescription)")
+            await Logger.shared.error("❌ Failed to run SidecarLauncher connect: \(error.localizedDescription)")
             return false
         }
     }
     
-    private func disconnectViaSidecarLauncher() -> Bool {
+    private func disconnectViaSidecarLauncher() async -> Bool {
         // Try to get device name - either from cache or by listing devices
         var deviceName = cachedDeviceName
         
         if deviceName == nil {
-            logger.log("No cached device name, attempting to list devices...")
-            deviceName = listDevices(maxRetries: 1)
+            await Logger.shared.info("No cached device name, attempting to list devices...")
+            deviceName = await listDevices(maxRetries: 1)
         }
         
         guard let name = deviceName else {
-            logger.log("❌ Cannot disconnect: no device name available")
+            await Logger.shared.error("❌ Cannot disconnect: no device name available")
             return false
         }
         
@@ -292,7 +265,7 @@ class SidecarController {
         task.standardError = pipe
         
         do {
-            logger.log("Disconnecting from \(name)...")
+            await Logger.shared.info("Disconnecting from \(name)...")
             try task.run()
             task.waitUntilExit()
             
@@ -300,21 +273,21 @@ class SidecarController {
             let output = String(data: data, encoding: .utf8) ?? ""
             
             let exitCode = task.terminationStatus
-            logger.log("SidecarLauncher disconnect exit code: \(exitCode)")
+            await Logger.shared.info("SidecarLauncher disconnect exit code: \(exitCode)")
             if !output.isEmpty {
-                logger.log("SidecarLauncher disconnect output:\n\(output)")
+                await Logger.shared.info("SidecarLauncher disconnect output:\n\(output)")
             }
             
             if exitCode == 0 {
-                logger.log("✓ Sidecar disconnected successfully")
+                await Logger.shared.info("✓ Sidecar disconnected successfully")
                 cachedDeviceName = nil
                 return true
             } else {
-                logger.log("❌ SidecarLauncher disconnect failed (exit code \(exitCode)): \(output)")
+                await Logger.shared.error("❌ SidecarLauncher disconnect failed (exit code \(exitCode)): \(output)")
                 return false
             }
         } catch {
-            logger.log("❌ Failed to run SidecarLauncher disconnect: \(error.localizedDescription)")
+            await Logger.shared.error("❌ Failed to run SidecarLauncher disconnect: \(error.localizedDescription)")
             return false
         }
     }

@@ -1,23 +1,21 @@
 import Foundation
+import OSLog
 
-class Logger {
-    private let logFileURL: URL
-    private let dateFormatter: DateFormatter
-    private let fileHandle: FileHandle?
+/// Modern, structured logger using OSLog subsystem
+actor Logger {
+    static let shared = Logger()
     
-    init() {
+    private let logger = os.Logger(subsystem: "com.jonwillis.autosidecar", category: "general")
+    private let logFileURL: URL
+    private var fileHandle: FileHandle?
+    
+    private init() {
         let logDirectory = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Logs")
         
-        // Create Logs directory if it doesn't exist
         try? FileManager.default.createDirectory(at: logDirectory, withIntermediateDirectories: true)
-        
         logFileURL = logDirectory.appendingPathComponent("auto-sidecar.log")
         
-        dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        
-        // Create log file if it doesn't exist
         if !FileManager.default.fileExists(atPath: logFileURL.path) {
             FileManager.default.createFile(atPath: logFileURL.path, contents: nil)
         }
@@ -26,21 +24,34 @@ class Logger {
         fileHandle?.seekToEndOfFile()
     }
     
-    func log(_ message: String) {
-        let timestamp = dateFormatter.string(from: Date())
-        let logMessage = "[\(timestamp)] \(message)\n"
+    func log(_ message: String, level: OSLogType = .default) {
+        // Use structured logging with OSLog
+        logger.log(level: level, "\(message, privacy: .public)")
         
-        // Print to console
-        print(logMessage, terminator: "")
-        
-        // Write to file - let OS handle buffering for better energy efficiency
-        if let data = logMessage.data(using: .utf8) {
-            fileHandle?.write(data)
+        // Also write to file for legacy compatibility
+        Task.detached { [logFileURL] in
+            let timestamp = Date.now.formatted(date: .numeric, time: .standard)
+            let logMessage = "[\(timestamp)] \(message)\n"
+            
+            guard let data = logMessage.data(using: .utf8),
+                  let handle = try? FileHandle(forWritingTo: logFileURL) else { return }
+            
+            defer { try? handle.close() }
+            try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
         }
     }
     
-    deinit {
-        fileHandle?.closeFile()
+    func debug(_ message: String) {
+        log(message, level: .debug)
+    }
+    
+    func info(_ message: String) {
+        log(message, level: .info)
+    }
+    
+    func error(_ message: String) {
+        log(message, level: .error)
     }
 }
 

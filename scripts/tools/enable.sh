@@ -8,5 +8,5 @@ echo "✓ Auto Sidecar activation ENABLED"
 echo ""
 echo "Sidecar will now activate automatically when iPad is connected via USB."
 echo "You can also toggle this from the menu bar icon."
-echo "To disable, run: ./disable.sh"
+echo "To disable, run: swift package dev-tools disable"
 

@@ -1,7 +1,8 @@
 import Foundation
 import IOKit
 
-struct USBDeviceInfo {
+/// Sendable USB device information
+struct USBDeviceInfo: Sendable {
     let name: String
     let vendorID: UInt16
     let productID: UInt16
@@ -15,20 +16,42 @@ struct USBDeviceInfo {
     }
 }
 
-class USBMonitor {
-    var onDeviceConnected: ((USBDeviceInfo) -> Void)?
-    var onDeviceDisconnected: ((USBDeviceInfo) -> Void)?
-    
+/// USB device event stream
+enum USBDeviceEvent: Sendable {
+    case connected(USBDeviceInfo)
+    case disconnected(USBDeviceInfo)
+}
+
+/// Modern USB monitor using AsyncStream and actors for thread safety
+actor USBMonitor {
     private var addedIterator: io_iterator_t = 0
     private var removedIterator: io_iterator_t = 0
     private var notificationPort: IONotificationPortRef?
     private var runLoopSource: CFRunLoopSource?
+    private var eventContinuation: AsyncStream<USBDeviceEvent>.Continuation?
     
-    func start() {
+    /// Stream of USB device events
+    func events() -> AsyncStream<USBDeviceEvent> {
+        AsyncStream { continuation in
+            self.eventContinuation = continuation
+            
+            Task {
+                await self.startMonitoring()
+            }
+            
+            continuation.onTermination = { @Sendable _ in
+                Task {
+                    await self.stopMonitoring()
+                }
+            }
+        }
+    }
+    
+    private func startMonitoring() async {
         // Create notification port
         notificationPort = IONotificationPortCreate(kIOMainPortDefault)
         guard let notificationPort = notificationPort else {
-            Logger().log("Failed to create IONotificationPort")
+            await Logger.shared.error("Failed to create IONotificationPort")
             return
         }
         
@@ -38,14 +61,16 @@ class USBMonitor {
         
         // Set up matching dictionary for USB devices
         guard let matchingDict = IOServiceMatching("IOUSBDevice") else {
-            Logger().log("Failed to create matching dictionary")
+            await Logger.shared.error("Failed to create matching dictionary")
             return
         }
         
         // Add notification for device addition
         let addedCallback: IOServiceMatchingCallback = { (refcon, iterator) in
             let monitor = Unmanaged<USBMonitor>.fromOpaque(refcon!).takeUnretainedValue()
-            monitor.handleDeviceAdded(iterator)
+            Task {
+                await monitor.handleDeviceAdded(iterator)
+            }
         }
         
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
@@ -60,18 +85,20 @@ class USBMonitor {
         )
         
         if kr != KERN_SUCCESS {
-            Logger().log("Failed to add matching notification for device addition: \(kr)")
+            await Logger.shared.error("Failed to add matching notification for device addition: \(kr)")
             return
         }
         
         // Set up notification for device removal
         let removedCallback: IOServiceMatchingCallback = { (refcon, iterator) in
             let monitor = Unmanaged<USBMonitor>.fromOpaque(refcon!).takeUnretainedValue()
-            monitor.handleDeviceRemoved(iterator)
+            Task {
+                await monitor.handleDeviceRemoved(iterator)
+            }
         }
         
         guard let removedMatchingDict = IOServiceMatching("IOUSBDevice") else {
-            Logger().log("Failed to create matching dictionary for removal")
+            await Logger.shared.error("Failed to create matching dictionary for removal")
             return
         }
         
@@ -87,23 +114,42 @@ class USBMonitor {
         )
         
         if kr2 != KERN_SUCCESS {
-            Logger().log("Failed to add matching notification for device removal: \(kr2)")
+            await Logger.shared.error("Failed to add matching notification for device removal: \(kr2)")
             return
         }
         
         removedIterator = removedIteratorTemp
         
         // Process initial devices
-        handleDeviceAdded(addedIterator)
+        await handleDeviceAdded(addedIterator)
         
-        Logger().log("USB monitoring started")
+        await Logger.shared.info("USB monitoring started")
+    }
+    
+    private func stopMonitoring() {
+        if addedIterator != 0 {
+            IOObjectRelease(addedIterator)
+            addedIterator = 0
+        }
+        if removedIterator != 0 {
+            IOObjectRelease(removedIterator)
+            removedIterator = 0
+        }
+        if let runLoopSource = runLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .defaultMode)
+            self.runLoopSource = nil
+        }
+        if let notificationPort = notificationPort {
+            IONotificationPortDestroy(notificationPort)
+            self.notificationPort = nil
+        }
     }
     
     private func handleDeviceAdded(_ iterator: io_iterator_t) {
         var device = IOIteratorNext(iterator)
         while device != 0 {
             if let deviceInfo = getDeviceInfo(device) {
-                onDeviceConnected?(deviceInfo)
+                eventContinuation?.yield(.connected(deviceInfo))
             }
             IOObjectRelease(device)
             device = IOIteratorNext(iterator)
@@ -114,7 +160,7 @@ class USBMonitor {
         var device = IOIteratorNext(iterator)
         while device != 0 {
             if let deviceInfo = getDeviceInfo(device) {
-                onDeviceDisconnected?(deviceInfo)
+                eventContinuation?.yield(.disconnected(deviceInfo))
             }
             IOObjectRelease(device)
             device = IOIteratorNext(iterator)
@@ -167,6 +213,5 @@ class USBMonitor {
             serialNumber: serialNumber
         )
     }
-    
 }
 

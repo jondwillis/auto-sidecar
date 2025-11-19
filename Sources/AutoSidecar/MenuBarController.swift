@@ -1,7 +1,11 @@
 import Cocoa
 import Foundation
+import UserNotifications
 
-class MenuBarController {
+/// Modern menu bar controller with async/await and observation
+@available(macOS 14.0, *)
+@MainActor
+final class MenuBarController {
     private var statusItem: NSStatusItem!
     private var menu: NSMenu!
     private let autoSidecar: AutoSidecar
@@ -13,11 +17,12 @@ class MenuBarController {
     private var disconnectOnRemovalMenuItem: NSMenuItem!
     
     private var isCheckingConnection = false
+    private var observationTask: Task<Void, Never>?
     
     init(autoSidecar: AutoSidecar) {
         self.autoSidecar = autoSidecar
         setupMenuBar()
-        setupObservers()
+        setupObservation()
         updateMenuItems()
     }
     
@@ -81,25 +86,33 @@ class MenuBarController {
         statusItem.menu = menu
     }
     
-    private func setupObservers() {
-        // Update menu items when state changes
-        NotificationCenter.default.addObserver(
-            forName: .autoSidecarStateChanged,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.updateMenuItems()
+    private func setupObservation() {
+        // Use modern observation with withObservationTracking
+        observationTask = Task { @MainActor in
+            while !Task.isCancelled {
+                withObservationTracking {
+                    // Access observed properties to establish tracking
+                    _ = autoSidecar.isEnabled
+                    _ = autoSidecar.hasConnectedIPad
+                    _ = autoSidecar.isSleeping
+                } onChange: {
+                    Task { @MainActor in
+                        self.updateMenuItems()
+                    }
+                }
+                
+                // Small delay to avoid rapid updates
+                try? await Task.sleep(for: .milliseconds(100))
+            }
         }
     }
     
     private func updateMenuItems() {
-        let state = autoSidecar.currentState
-        
         // Update status text
         var statusText = "Status: "
-        if !state.isEnabled {
+        if !autoSidecar.isEnabled {
             statusText += "Auto-Activation Disabled"
-        } else if state.hasConnectedIPad {
+        } else if autoSidecar.hasConnectedIPad {
             statusText += "iPad Connected"
         } else {
             statusText += "Waiting for iPad"
@@ -108,9 +121,9 @@ class MenuBarController {
         
         // Update icon based on state
         if let button = statusItem.button {
-            if !state.isEnabled {
+            if !autoSidecar.isEnabled {
                 button.image = NSImage(systemSymbolName: "ipad.slash", accessibilityDescription: "Auto Sidecar Disabled")
-            } else if state.hasConnectedIPad {
+            } else if autoSidecar.hasConnectedIPad {
                 button.image = NSImage(systemSymbolName: "ipad.badge.play", accessibilityDescription: "iPad Connected")
             } else {
                 button.image = NSImage(systemSymbolName: "ipad.and.arrow.forward", accessibilityDescription: "Auto Sidecar Active")
@@ -119,29 +132,31 @@ class MenuBarController {
         }
         
         // Update toggle text
-        toggleMenuItem.title = state.isEnabled ? "Disable Auto-Activation" : "Enable Auto-Activation"
+        toggleMenuItem.title = autoSidecar.isEnabled ? "Disable Auto-Activation" : "Enable Auto-Activation"
         
         // Update connect/disconnect button based on Sidecar connection status
-        updateConnectionMenuItem()
+        Task {
+            await updateConnectionMenuItem()
+        }
         
         // Update disconnect on removal checkbox
         disconnectOnRemovalMenuItem.state = Preferences.shared.shouldDisconnectOnUSBRemoval ? .on : .off
     }
     
-    private func updateConnectionMenuItem() {
+    private func updateConnectionMenuItem() async {
         guard !isCheckingConnection else { return }
         
         isCheckingConnection = true
-        autoSidecar.sidecarController.isConnected { [weak self] connected in
-            guard let self = self else { return }
-            self.isCheckingConnection = false
-            
+        let connected = await autoSidecar.sidecarController.isConnected()
+        isCheckingConnection = false
+        
+        await MainActor.run {
             if connected {
-                self.connectMenuItem.title = "Disconnect Sidecar"
-                self.connectMenuItem.isEnabled = true
+                connectMenuItem.title = "Disconnect Sidecar"
+                connectMenuItem.isEnabled = true
             } else {
-                self.connectMenuItem.title = "Connect to Sidecar"
-                self.connectMenuItem.isEnabled = self.autoSidecar.currentState.hasConnectedIPad
+                connectMenuItem.title = "Connect to Sidecar"
+                connectMenuItem.isEnabled = autoSidecar.hasConnectedIPad
             }
         }
     }
@@ -152,41 +167,39 @@ class MenuBarController {
         updateMenuItems()
         
         let enabled = Preferences.shared.isAutoActivationEnabled
-        showNotification(
-            title: "Auto Sidecar",
-            message: enabled ? "Auto-activation enabled" : "Auto-activation disabled"
-        )
+        Task {
+            await showNotification(
+                title: "Auto Sidecar",
+                message: enabled ? "Auto-activation enabled" : "Auto-activation disabled"
+            )
+        }
     }
     
     @objc private func toggleConnection() {
-        // Check current connection status
-        autoSidecar.sidecarController.isConnected { [weak self] connected in
-            guard let self = self else { return }
+        Task {
+            // Check current connection status
+            let connected = await autoSidecar.sidecarController.isConnected()
             
             if connected {
                 // Disconnect
-                self.showNotification(title: "Auto Sidecar", message: "Disconnecting from iPad...")
-                self.autoSidecar.manualDisconnect { success in
-                    DispatchQueue.main.async {
-                        self.showNotification(
-                            title: "Auto Sidecar",
-                            message: success ? "Disconnected successfully" : "Disconnect failed"
-                        )
-                        self.updateMenuItems()
-                    }
-                }
+                await showNotification(title: "Auto Sidecar", message: "Disconnecting from iPad...")
+                let success = await autoSidecar.manualDisconnect()
+                await showNotification(
+                    title: "Auto Sidecar",
+                    message: success ? "Disconnected successfully" : "Disconnect failed"
+                )
             } else {
                 // Connect
-                self.showNotification(title: "Auto Sidecar", message: "Connecting to iPad...")
-                self.autoSidecar.manualConnect { success in
-                    DispatchQueue.main.async {
-                        self.showNotification(
-                            title: "Auto Sidecar",
-                            message: success ? "Connected successfully" : "Connection failed"
-                        )
-                        self.updateMenuItems()
-                    }
-                }
+                await showNotification(title: "Auto Sidecar", message: "Connecting to iPad...")
+                let success = await autoSidecar.manualConnect()
+                await showNotification(
+                    title: "Auto Sidecar",
+                    message: success ? "Connected successfully" : "Connection failed"
+                )
+            }
+            
+            await MainActor.run {
+                updateMenuItems()
             }
         }
     }
@@ -203,7 +216,7 @@ class MenuBarController {
         if let consoleURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Console") {
             NSWorkspace.shared.open([URL(fileURLWithPath: logPath)], withApplicationAt: consoleURL, configuration: NSWorkspace.OpenConfiguration())
         } else {
-            NSWorkspace.shared.openFile(logPath)
+            NSWorkspace.shared.open(URL(fileURLWithPath: logPath))
         }
     }
     
@@ -234,12 +247,28 @@ class MenuBarController {
         NSApplication.shared.terminate(nil)
     }
     
-    private func showNotification(title: String, message: String) {
-        let notification = NSUserNotification()
-        notification.title = title
-        notification.informativeText = message
-        notification.soundName = NSUserNotificationDefaultSoundName
-        NSUserNotificationCenter.default.deliver(notification)
+    private func showNotification(title: String, message: String) async {
+        // Use modern UNUserNotificationCenter
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = message
+        content.sound = .default
+        
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: nil
+        )
+        
+        do {
+            try await UNUserNotificationCenter.current().add(request)
+        } catch {
+            await Logger.shared.error("Failed to show notification: \(error.localizedDescription)")
+        }
+    }
+    
+    deinit {
+        observationTask?.cancel()
     }
 }
 
