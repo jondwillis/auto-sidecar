@@ -37,8 +37,8 @@ actor Logger {
                   let handle = try? FileHandle(forWritingTo: logFileURL) else { return }
             
             defer { try? handle.close() }
-            try? handle.seekToEnd()
-            try? handle.write(contentsOf: data)
+            _ = try? handle.seekToEnd()
+            _ = try? handle.write(contentsOf: data)
         }
     }
     

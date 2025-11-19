@@ -6,7 +6,6 @@ struct BuildAppPlugin: CommandPlugin {
     func performCommand(context: PluginContext, arguments: [String]) async throws {
         let appName = "Auto Sidecar"
         let executableName = "AutoSidecar"
-        let buildDir = context.pluginWorkDirectory.appending("release")
         
         print("🔨 Building Auto Sidecar.app...")
         print("")

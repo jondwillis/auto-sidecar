@@ -28,6 +28,7 @@ actor USBMonitor {
     private var removedIterator: io_iterator_t = 0
     private var notificationPort: IONotificationPortRef?
     private var runLoopSource: CFRunLoopSource?
+    private var runLoop: CFRunLoop?
     private var eventContinuation: AsyncStream<USBDeviceEvent>.Continuation?
     
     /// Stream of USB device events
@@ -55,9 +56,12 @@ actor USBMonitor {
             return
         }
         
-        // Get run loop source
+        // Get run loop source and attach to main run loop
+        // Note: We use CFRunLoopGetMain() instead of CFRunLoopGetCurrent() 
+        // because CFRunLoopGetCurrent() is unavailable in async contexts
+        runLoop = CFRunLoopGetMain()
         runLoopSource = IONotificationPortGetRunLoopSource(notificationPort).takeUnretainedValue()
-        CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .defaultMode)
+        CFRunLoopAddSource(runLoop, runLoopSource, .defaultMode)
         
         // Set up matching dictionary for USB devices
         guard let matchingDict = IOServiceMatching("IOUSBDevice") else {
@@ -121,7 +125,7 @@ actor USBMonitor {
         removedIterator = removedIteratorTemp
         
         // Process initial devices
-        await handleDeviceAdded(addedIterator)
+        handleDeviceAdded(addedIterator)
         
         await Logger.shared.info("USB monitoring started")
     }
@@ -135,9 +139,10 @@ actor USBMonitor {
             IOObjectRelease(removedIterator)
             removedIterator = 0
         }
-        if let runLoopSource = runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .defaultMode)
+        if let runLoopSource = runLoopSource, let runLoop = runLoop {
+            CFRunLoopRemoveSource(runLoop, runLoopSource, .defaultMode)
             self.runLoopSource = nil
+            self.runLoop = nil
         }
         if let notificationPort = notificationPort {
             IONotificationPortDestroy(notificationPort)
