@@ -30,6 +30,7 @@ User-facing management tools:
 - `check-permissions.sh` - Check Accessibility permissions
 - `diagnose-devices.sh` - Comprehensive device and system diagnostics
 - `uninstall.sh` - Uninstall the app and clean up
+- `release.sh` - Update version, create git tag, and push release
 
 ### `dev/`
 Development and CI/CD scripts:

@@ -224,7 +224,7 @@ final class MenuBarController {
         let alert = NSAlert()
         alert.messageText = "Auto Sidecar"
         alert.informativeText = """
-        Version 1.2.0
+        Version 1.0.0
         
         Automatically connects your iPad as a Sidecar display when plugged in via USB.
         

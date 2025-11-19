@@ -98,15 +98,28 @@ jobs:
           sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
           xcodebuild -version
 
-      - name: Build release binary
-        run: xcrun --toolchain default swift build -c release
-
       - name: Get version from tag
         id: get_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-      - name: Package binary
+      
+      - name: Build app bundle
+        run: xcrun --toolchain default swift package build-app
+      
+      - name: Create DMG
         run: |
+          APP_NAME="Auto Sidecar"
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          DMG_NAME="AutoSidecar-${VERSION}.dmg"
+          
+          echo "Creating DMG..."
+          hdiutil create -volname "${APP_NAME}" -srcfolder "${APP_NAME}.app" -ov -format UDZO "${DMG_NAME}"
+          
+          echo "✓ DMG created: ${DMG_NAME}"
+          ls -lh "${DMG_NAME}"
+      
+      - name: Package CLI binary (tar.gz)
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
           mkdir -p dist
           cp .build/release/auto-sidecar dist/
           cp SidecarLauncher dist/
@@ -115,20 +128,41 @@ jobs:
           cp README.md dist/
           cp LICENSE dist/ || echo "LICENSE file not found"
           cd dist
-          tar -czf auto-sidecar-${{ steps.get_version.outputs.VERSION }}-macos.tar.gz *
-          mv auto-sidecar-${{ steps.get_version.outputs.VERSION }}-macos.tar.gz ..
+          tar -czf auto-sidecar-${VERSION}-macos.tar.gz *
+          mv auto-sidecar-${VERSION}-macos.tar.gz ..
           cd ..
-
-      - name: Generate SHA256 checksum
+      
+      - name: Generate SHA256 checksums
         run: |
-          shasum -a 256 auto-sidecar-${{ steps.get_version.outputs.VERSION }}-macos.tar.gz > auto-sidecar-${{ steps.get_version.outputs.VERSION }}-macos.tar.gz.sha256
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          shasum -a 256 AutoSidecar-${VERSION}.dmg > AutoSidecar-${VERSION}.dmg.sha256
+          shasum -a 256 auto-sidecar-${VERSION}-macos.tar.gz > auto-sidecar-${VERSION}-macos.tar.gz.sha256
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
+            AutoSidecar-${{ steps.get_version.outputs.VERSION }}.dmg
+            AutoSidecar-${{ steps.get_version.outputs.VERSION }}.dmg.sha256
             auto-sidecar-${{ steps.get_version.outputs.VERSION }}-macos.tar.gz
             auto-sidecar-${{ steps.get_version.outputs.VERSION }}-macos.tar.gz.sha256
+          body: |
+            ## Installation Options
+            
+            ### Option 1: DMG (Recommended for most users)
+            1. Download `AutoSidecar-${{ steps.get_version.outputs.VERSION }}.dmg`
+            2. Open the DMG and drag "Auto Sidecar.app" to Applications
+            3. Launch from Applications and grant Accessibility permissions
+            
+            ### Option 2: CLI Binary (Advanced users)
+            1. Download `auto-sidecar-${{ steps.get_version.outputs.VERSION }}-macos.tar.gz`
+            2. Extract and run the installation script
+            
+            ### Verification
+            Use the `.sha256` files to verify downloads:
+            ```bash
+            shasum -a 256 -c AutoSidecar-${{ steps.get_version.outputs.VERSION }}.dmg.sha256
+            ```
           generate_release_notes: true
           draft: false
           prerelease: false
